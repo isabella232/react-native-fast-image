@@ -17,6 +17,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.WeakHashMap;
 
 import okhttp3.Interceptor;
 import okhttp3.MediaType;
@@ -31,6 +32,7 @@ import okio.Okio;
 import okio.Source;
 
 public class OkHttpProgressGlideModule implements GlideModule {
+    private static DispatchingProgressListener progressListener = new DispatchingProgressListener();
 
     @Override
     public void applyOptions(Context context, GlideBuilder builder) {builder.setDecodeFormat(DecodeFormat.PREFER_ARGB_8888); }
@@ -40,7 +42,7 @@ public class OkHttpProgressGlideModule implements GlideModule {
         OkHttpClient client = OkHttpClientProvider
                 .getOkHttpClient()
                 .newBuilder()
-                .addInterceptor(createInterceptor(new DispatchingProgressListener()))
+                .addInterceptor(createInterceptor(progressListener))
                 .build();
         glide.register(GlideUrl.class, InputStream.class, new OkHttpUrlLoader.Factory(client));
     }
@@ -61,11 +63,11 @@ public class OkHttpProgressGlideModule implements GlideModule {
     }
 
     public static void forget(String key) {
-        DispatchingProgressListener.forget(key);
+        progressListener.forget(key);
     }
 
     public static void expect(String key, ProgressListener listener) {
-        DispatchingProgressListener.expect(key, listener);
+        progressListener.expect(key, listener);
     }
 
     private interface ResponseProgressListener {
@@ -73,8 +75,8 @@ public class OkHttpProgressGlideModule implements GlideModule {
     }
 
     private static class DispatchingProgressListener implements ResponseProgressListener {
-        private static final Map<String, ProgressListener> LISTENERS = new HashMap<>();
-        private static final Map<String, Long> PROGRESSES = new HashMap<>();
+        private final Map<String, ProgressListener> LISTENERS = new WeakHashMap<>();
+        private final Map<String, Long> PROGRESSES = new HashMap<>();
 
         private final Handler handler;
 
@@ -82,12 +84,12 @@ public class OkHttpProgressGlideModule implements GlideModule {
             this.handler = new Handler(Looper.getMainLooper());
         }
 
-        static void forget(String key) {
+        void forget(String key) {
             LISTENERS.remove(key);
             PROGRESSES.remove(key);
         }
 
-        static void expect(String key, ProgressListener listener) {
+        void expect(String key, ProgressListener listener) {
             LISTENERS.put(key, listener);
         }
 
